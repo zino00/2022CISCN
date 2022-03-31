@@ -1,0 +1,3 @@
+[submodule "tag/tinyxml2"]
+	path = tag/tinyxml2
+	url = https://github.com/leethomason/tinyxml2
