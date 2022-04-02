@@ -31,10 +31,13 @@ all: $(TEST_OPT_LLs) $(TEST_RAW_LLs)
 # also use the option `-O0 -Xclang -disable-O0-optnone` (rather than `-O2`) to
 # disable Clang native optimizations.
 ./tests/%.bc: ./tests/%.c
-	clang-$(CLANG_VERSION) -O2 -emit-llvm -c $< -o $@
+	clang-$(CLANG_VERSION) -O0 -Xclang -disable-O0-optnone -g -emit-llvm -c $< -o $@
+
+libtinyxml2.a: ./tinyxml2/Makefile
+	make -C ./tinyxml2 staticlib
 
 # Build the optimizer from the source files.
-$(OPTIMIZER): $(OPT_OBJs)
+$(OPTIMIZER): $(OPT_OBJs) ./tinyxml2/libtinyxml2.a
 	$(CXX) -dylib -fPIC -shared $^ -o $@
 
 .PHONY: clean
