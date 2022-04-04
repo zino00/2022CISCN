@@ -25,7 +25,10 @@ all: $(TEST_OPT_LLs) $(TEST_RAW_LLs)
 	env LD_LIBRARY_PATH=. \
 		opt-$(LLVM_VERSION) -enable-new-pm=0 \
 		-load $(OPTIMIZER) $(OPT_PASSES) \
-		-xml-path ${JULIET_XML_PATH} $< -o $@
+		$< -o $@ \
+		-selector getModuleInfo -xml-path /tmp/output.xml
+		# -selector printTargetInst -id 20
+		# -selector getVulnInstID -xml-path ${JULIET_XML_PATH} 
 
 # Every raw bytecode is compiled from the corresponding C source file. You can
 # also use the option `-O0 -Xclang -disable-O0-optnone` (rather than `-O2`) to

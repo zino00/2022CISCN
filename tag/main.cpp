@@ -2,6 +2,8 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/Value.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/CommandLine.h"
 
@@ -23,6 +25,8 @@ using namespace std;
   } while (0)
 
 static cl::opt<std::string> xml_path("xml-path", cl::desc("xml path used in Tag-Label Pass"), cl::value_desc("xml-path"));
+static cl::opt<std::string> arg_id("id", cl::desc("id used in Tag-Label Pass"), cl::value_desc("id"));
+static cl::opt<std::string> selector("selector", cl::desc("argument selector used in Tag-Label Pass"), cl::value_desc("sel"));
 
 namespace {
 
@@ -30,9 +34,6 @@ class TagLabel final : public ModulePass
 {
 public:
 	static char ID;
-    
-    XMLDocument doc;
-    map<string, list<size_t>> vulns_map; // path -> lines
 
 	TagLabel() : ModulePass(ID) {}
 	virtual ~TagLabel() override {}
@@ -43,7 +44,8 @@ public:
 		AU.setPreservesAll();
 	}
 
-    void get_vuln_info() {
+    map<string, list<size_t>> getVulnInfo(string xml_path) {
+        map<string, list<size_t>> vulns_map; // path -> lines
         /*
         <container>
             <testcase>
@@ -55,6 +57,7 @@ public:
         */
 
         /* 1. 收集 XML 中所有的文件条目 */
+        XMLDocument doc;
 
         if(doc.LoadFile(xml_path.c_str()))
             FATAL("[-] load xml file failed\n");
@@ -98,9 +101,10 @@ public:
                 }
             }
         }
+        return vulns_map;
     } 
 
-    vector<size_t> get_vuln_inst_id(Module& M) {
+    vector<size_t> getVulnInstID(map<string, list<size_t>>& vulns_map, Module& M) {
         /* 2. 遍历所有指令ID -> 对应的文件和行号 */
         vector<size_t> vuln_inst_ids;
         size_t id = 0;
@@ -149,16 +153,111 @@ public:
         return vuln_inst_ids;
     }
 
+    map<string, list<pair<string, int>>> getModuleInfo(Module & M) {
+        map<string, list<pair<string, int>>> info_map;
+        for(Function& F : M) {
+            string&& func_name = F.getName().str();
+            for (BasicBlock& B : F) {
+                for (Instruction& I : B) {
+                    CallInst* call_inst = dyn_cast<CallInst>(&I);
+                    if(!call_inst)
+                        continue;
+
+                    Function* func = call_inst->getCalledFunction();
+                    if(!func || func->getName().str() != "llvm.dbg.declare")
+                        continue;
+
+                    // cout << func->getName().str() << endl;
+                    Value* op_val = call_inst->getOperand(1);
+                    MetadataAsValue* meta_val = cast<MetadataAsValue>(op_val);
+                    Metadata* md = meta_val->getMetadata();
+                    DIVariable* var = dyn_cast<DIVariable>(md);
+
+                    string&& var_name = var->getName().str();
+                    unsigned line = var->getLine();
+
+                    LOG("%s:%d in %s\n", var_name.c_str(), line, func_name.c_str());
+                    
+                    info_map[func_name].push_back(make_pair(var_name, line));
+                }
+            }
+        }
+        return info_map;
+    }
+
+    void saveModuleToXml(map<string, list<pair<string, int>>>& info, string& path) {
+        /*
+            <root>
+                <function name="g_incr">
+                    <variable name="c" line="3"/>
+                </function>
+                <function name="loop">
+                    <variable name="a" line="10"/>
+                    <variable name="b" line="10"/>
+                    <variable name="c" line="10"/>
+                    <variable name="i" line="12"/>
+                    <variable name="ret" line="12"/>
+                </function>
+            </root>
+        */
+
+        XMLDocument doc;
+        XMLElement* root = doc.NewElement("root");
+        doc.InsertEndChild(root);
+
+        for(auto &func_pair : info) {
+            const string& func_name = func_pair.first;
+            auto pair_list = func_pair.second;
+
+            XMLElement* function = doc.NewElement("function");
+            function->SetAttribute("name", func_name.c_str());
+            root->InsertEndChild(function);
+
+            for(auto& var_pair : pair_list) {
+                const string& var_name = var_pair.first;
+                unsigned line = var_pair.second;
+
+                XMLElement* var = doc.NewElement("variable");
+                var->SetAttribute("name", var_name.c_str());
+                var->SetAttribute("line", line);
+                function->InsertEndChild(var);
+            }
+        }
+        doc.SaveFile(path.c_str());
+    }
+
+    void printTargetInst(Module & M, size_t id_arg) {
+        size_t id = 0;
+        for(Function& F : M) {
+            for (BasicBlock& B : F) {
+                for (Instruction& I : B) {
+                    id++;
+                    if(id == id_arg) {
+                        I.dump();
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
 	virtual bool runOnModule(Module & M) override
 	{
-        LOG("[+] xml_path: %s\n", xml_path.c_str());
-        LOG("[+] src files: %s\n", M.getSourceFileName().c_str());
+        // LOG("[+] xml_path: %s\n", xml_path.c_str());
+        // LOG("[+] src files: %s\n", M.getSourceFileName().c_str());
 
-        get_vuln_info();
-        vector<size_t> vuln_ids = get_vuln_inst_id(M);
+        if(selector == "getVulnInstID") {
+            auto&& vulns_map = getVulnInfo(xml_path);
+            vector<size_t>&& vuln_ids = getVulnInstID(vulns_map, M);
 
-        for(auto id : vuln_ids)
-            cout << id << "\t";
+            for(auto id : vuln_ids)
+                cout << id << "\t";
+        } else if (selector == "getModuleInfo") {
+            auto&& module_info_map = getModuleInfo(M);
+            saveModuleToXml(module_info_map, xml_path);
+        } else if (selector == "printTargetInst") {
+            printTargetInst(M, atoi(arg_id.c_str()));
+        }
 
 		return false;
 	}
