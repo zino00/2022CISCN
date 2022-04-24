@@ -168,8 +168,6 @@ void IR2Vec_FA::generateFlowAwareEncodings(std::ostream *o,
         // res += M.getSourceFileName() + "__" + demangledName + "\t";
 
         // res += "=\t";
-        
-        res += "\n";
         for (auto j : tmp) {
             for(auto i : j) {
                 if ((i <= 0.0001 && i > 0) || (i < 0 && i >= -0.0001)) {
