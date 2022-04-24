@@ -6,6 +6,7 @@
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/ADT/PostOrderIterator.h"
 
 #include "tinyxml2/tinyxml2.h"
 #include <iostream>
@@ -116,8 +117,9 @@ public:
 
             // sub_prog->getFilename();
             // if(vulns_map.find(sub_prog->))
-            for (BasicBlock& B : F) {
-                for (Instruction& I : B) {
+            ReversePostOrderTraversal<Function *> RPOT(&F);
+            for (BasicBlock* B : RPOT) {
+                for (Instruction& I : *B) {
                     id++;
 
                     if(!I.hasMetadata()) 
@@ -229,12 +231,28 @@ public:
     void printTargetInst(Module & M, size_t id_arg) {
         size_t id = 0;
         for(Function& F : M) {
-            for (BasicBlock& B : F) {
-                for (Instruction& I : B) {
+            ReversePostOrderTraversal<Function *> RPOT(&F);
+            for (BasicBlock* B : RPOT) {
+                for (Instruction& I : *B) {
                     id++;
-                    if(id == id_arg) {
+                    if(id >= id_arg) {
                         I.dump();
-                        return;
+                        if(I.hasMetadata()) {
+                            const DebugLoc& dbg_loc = I.getDebugLoc();
+                            DIScope *Scope = cast<DIScope>(dbg_loc.getScope());
+
+                            string&& filename = Scope->getFilename().str();
+                            string basename = filename;
+
+                            size_t dash_pos = filename.find_last_of('/');
+                            if(dash_pos != string::npos)
+                                basename = filename.substr(dash_pos + 1);
+
+                            unsigned int line = dbg_loc.getLine();
+
+                            LOG("Inst(%ld): %s:%d\n", id, basename.c_str(), line);
+                            return;
+                        }
                     }
                 }
             }
