@@ -1,0 +1,10 @@
+build/
+.ipynb_checkpoints/
+__pycache__/
+.vscode
+experiments/*/output
+eigen*
+
+**/*.pyc
+#**/*.so
+seed_embeddings/preprocessed/
