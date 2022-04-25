@@ -15,14 +15,13 @@ SC_path = '/home/sung/Desktop/joern/script/cpg_extract.sc'
 # txt 文件路径 包含敏感函数名
 sensitive_funcname_txt_path = "/home/sung/Desktop/joern/script/sensitive_funcname.txt"
 
-'''
-description: 将 txt 文件里面的内容提取到一个 function_list 列表
-param {string} txt_path: txt 文件路径
-return {list} function_list: 返回 function_list 列表
-'''
-
 
 def get_all_function_list(txt_path):
+    '''
+    description: 将 txt 文件里面的内容提取到一个 function_list 列表
+    param {string} txt_path: txt 文件路径
+    return {list} function_list: 返回 function_list 列表
+    '''
     function_list = []
     with open(txt_path, 'r') as txtfile:
         sensitive_funcname = txtfile.readline()
@@ -30,14 +29,12 @@ def get_all_function_list(txt_path):
     return function_list
 
 
-'''
-description: 使用joern-parse解析一个c文件得到cpg图,对cpg图进行josrn分析,提取可能的漏洞代码和行号,保存在一个json文件
-param {string} c_Filename
-param {list} function_list
-'''
-
-
 def c2res(c_Filename, function_list):
+    '''
+    description: 使用joern-parse解析一个c文件得到cpg图,对cpg图进行josrn分析,提取可能的漏洞代码和行号,保存在一个json文件
+    param {string} c_Filename
+    param {list} function_list
+    '''
     for filepath, dirnames, filenames in os.walk(C_source_dir):
         flag = False
         for item in filenames:
@@ -104,14 +101,12 @@ def c2res(c_Filename, function_list):
             break
 
 
-'''
-description: 对c_folder_dir目录下的所有c文件进行分析
-param {string} c_folder_dir: 要分析的c源代码目录
-param {string} functino_list: 敏感函数列表
-'''
-
-
 def test_c2res(c_folder_dir, functino_list):
+    '''
+    description: 对c_folder_dir目录下的所有c文件进行分析
+    param {string} c_folder_dir: 要分析的c源代码目录
+    param {string} functino_list: 敏感函数列表
+    '''
     for filepath, dirnames, filenames in os.walk(c_folder_dir):
         for item in filenames:
             print(item)
