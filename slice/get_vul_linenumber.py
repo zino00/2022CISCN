@@ -1,8 +1,6 @@
-from operator import itemgetter
 import subprocess
 import os
 import time
-import tqdm
 import json
 import re
 '''
@@ -76,21 +74,25 @@ def c2res(c_Filename, function_list):
                         if item['_label'] == "LOCAL":
                             variable_list.append(item['name'])
                     for item in properties_data:
-                        if '*' in item['code'] or '[' in item['code']:
+                        if ('*' in item['code'] or '[' in item['code']) and item['_label'] == "LOCAL":
                             res = {}
-                            res['name'] = item['name']
+                            res['variable'] = item['name']
                             res['lineNumber'] = item['lineNumber']
                             allres.append(res)
                             print(res)
-                        elif '<operator>.assignment' == item['name'] and variable_list.count(re.split('=|\+|\-', item['code'])[1]) != 0:
+                        elif '<operator>.assignment' == item['name'] and item['_label'] == "CALL":
+                            for var in variable_list:
+                                if var in re.split('=', item['code'])[1]:
+                                    res = {}
+                                    res['assignment'] = re.split(
+                                        '=', item['code'])[0]
+                                    res['lineNumber'] = item['lineNumber']
+                                    allres.append(res)
+                                    print(res)
+                                    break
+                        elif function_list.count(item['name']) != 0 and item['_label'] == "CALL":
                             res = {}
-                            res['code'] = re.split('=', item['code'])[0]
-                            res['lineNumber'] = item['lineNumber']
-                            allres.append(res)
-                            print(res)
-                        elif function_list.count(item['name']) != 0:
-                            res = {}
-                            res['name'] = item['name']
+                            res['function'] = item['name']
                             res['lineNumber'] = item['lineNumber']
                             allres.append(res)
                             print(res)
@@ -119,12 +121,15 @@ def test_c2res(c_folder_dir, functino_list):
 
 if __name__ == "__main__":
     start = time.time()
-    
+
     # 得到敏感函数列表 function_list
     function_list = get_all_function_list(sensitive_funcname_txt_path)
     # 分析 C_source_dir + "CWE15_External_Control_of_System_or_Configuration_Setting/" 目录下面的c文件
-    test_c2res(C_source_dir + "CWE15_External_Control_of_System_or_Configuration_Setting/", function_list)
-    
+    test_c2res(C_source_dir +
+               "CWE15_External_Control_of_System_or_Configuration_Setting/", function_list)
+    # 删掉joern 保存的 workspace 目录
+    rm_command = "rm -rf ./workspace"
+    subprocess.call(rm_command, shell=True)
     # 计算程序运行时间
     end = time.time()
     print("循环运行时间:%.2f秒" % (end-start))
