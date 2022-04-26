@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.13)
 project(IRHandler VERSION 2.0.0)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g3 -ggdb3")
 
 set(LT_LLVM_INSTALL_DIR "" CACHE PATH "LLVM installation directory")
 list(APPEND CMAKE_PREFIX_PATH "${LT_LLVM_INSTALL_DIR}/lib/cmake/llvm/")

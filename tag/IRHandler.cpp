@@ -38,6 +38,11 @@ cl::opt<std::string> arg_id(
     cl::desc("id"), 
     cl::value_desc("id"));
 
+cl::opt<std::string> dbgOpt(
+    "debug", 
+    cl::desc("option for debug use"), 
+    cl::value_desc("dbg-opt"));
+
 cl::opt<std::string> selector(
     "selector", 
     cl::desc("argument selector"), 
@@ -133,6 +138,8 @@ vector<size_t> getVulnInstID(map<string, list<size_t>>& vulns_map, Module& M) {
 
         // sub_prog->getFilename();
         // if(vulns_map.find(sub_prog->))
+        if (F.isDeclaration())
+                continue;
         ReversePostOrderTraversal<Function *> RPOT(&F);
         for (BasicBlock* B : RPOT) {
             for (Instruction& I : *B) {
@@ -247,6 +254,8 @@ void saveModuleToXml(map<string, list<pair<string, int>>>& info, string& path) {
 void printTargetInst(Module & M, size_t id_arg) {
     size_t id = 0;
     for(Function& F : M) {
+        if (F.isDeclaration())
+                continue;
         ReversePostOrderTraversal<Function *> RPOT(&F);
         for (BasicBlock* B : RPOT) {
             for (Instruction& I : *B) {
@@ -277,16 +286,34 @@ void printTargetInst(Module & M, size_t id_arg) {
 
 void testAndExit(Module& M) {
     size_t id = 0;
-    for(auto& F : M) {
-        ReversePostOrderTraversal<Function *> RPOT(&F);
-        for(auto * B : RPOT) {
-            for(auto& I : *B) {
-                I.dump();
+    if(!dbgOpt.empty()) {
+        for(auto& F : M) {
+            if (F.isDeclaration())
+                continue;
+            LOG("Func: %s\n", F.getName());
+            ReversePostOrderTraversal<Function *> RPOT(&F);
+            for(auto * B : RPOT) {
+                for(auto& I : *B) {
+                    I.dump();
+                }
+                LOG("End1\n");
             }
-            LOG("End1\n");
+            LOG("End2\n");
         }
-        LOG("End2\n");
     }
+    else {
+        for(auto& F : M) {
+            LOG("Func: %s\n", F.getName());
+            for(auto& B : F) {
+                for(auto& I : B) {
+                    I.dump();
+                }
+                LOG("End1\n");
+            }
+            LOG("End2\n");
+        }
+    }
+   
     exit(EXIT_SUCCESS);
 }
 
