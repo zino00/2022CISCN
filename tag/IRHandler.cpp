@@ -321,7 +321,7 @@ int main(int argc, char **argv) {
     cl::ParseCommandLineOptions(argc, argv);
     auto M = getLLVMIR(inputFname);
 
-    testAndExit(*M);
+    // testAndExit(*M);
 
 
     // LOG("[+] xml_path: %s\n", xml_path.c_str());
