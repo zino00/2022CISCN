@@ -15,16 +15,6 @@ SC_path = '/home/yuhan/桌面/2022CISCN/slice/cpg_extract.sc'
 # txt 文件路径 包含敏感函数名
 sensitive_funcname_txt_path = "/home/yuhan/桌面/2022CISCN/slice/sensitive_funcname.txt"
 
-<<<<<<< HEAD
-'''
-description: 将 txt 文件里面的内容提取到一个 function_list 列表
-param {string} txt_path: txt 文件路径
-
-return {list} function_list: 返回 function_list 列表
-'''
-
-=======
->>>>>>> e24f1942802aa4574d0ea9d6fa52275448e079ba
 
 def get_all_function_list(txt_path):
     '''
@@ -34,25 +24,27 @@ def get_all_function_list(txt_path):
     '''
     function_list = []
     with open(txt_path, 'r') as txtfile:
-        sensitive_funcname = txtfile.readline()
-        function_list.append(sensitive_funcname)
+        for line in txtfile.readlines():
+            sensitive_funcname = line.strip('\n')
+            function_list.append(sensitive_funcname)
     return function_list
 
 
 def c2res(c_Filename, function_list):
-<<<<<<< HEAD
-    result_file_path = ""
-=======
     '''
     description: 使用joern-parse解析一个c文件得到cpg图,对cpg图进行josrn分析,提取可能的漏洞代码和行号,保存在一个json文件
     param {string} c_Filename
     param {list} function_list
     '''
->>>>>>> e24f1942802aa4574d0ea9d6fa52275448e079ba
+    result_file_path = ''
+    if '/' in c_Filename:
+        str = '/'
+        dir_name = str.join(c_Filename.split('/')[:-1])
+        c_Filename = c_Filename.split('/')[-1]
     for filepath, dirnames, filenames in os.walk(C_source_dir):
         flag = False
         for item in filenames:
-            if c_Filename == item:
+            if c_Filename == item and (dir_name in filepath):
                 c_file_path = filepath + '/' + item
                 c_file_dir = filepath
                 result_filename = c_Filename[:-2] + '_res.json'
@@ -94,8 +86,9 @@ def c2res(c_Filename, function_list):
                     for item in properties_data:
                         if ('*' in item['code'] or '[' in item['code']) and item['_label'] == "LOCAL":
                             res = {}
-                            var=re.findall(r"[_a-zA-Z][_a-zA-Z0-9]*",item['name'])[0]
-                            res['variable'] =var
+                            var = re.findall(
+                                r"[_a-zA-Z][_a-zA-Z0-9]*", item['name'])[0]
+                            res['variable'] = var
                             res['lineNumber'] = item['lineNumber']
                             allres.append(res)
                             print(res)
@@ -103,9 +96,10 @@ def c2res(c_Filename, function_list):
                             for var in variable_list:
                                 if var in re.split('=', item['code'])[1]:
                                     res = {}
-                                    var=re.split('=', item['code'])[0]
-                                    var=re.findall(r"[_a-zA-Z][_a-zA-Z0-9]*",var)[0]
-                                    res['assignment']=var
+                                    var = re.split('=', item['code'])[0]
+                                    var = re.findall(
+                                        r"[_a-zA-Z][_a-zA-Z0-9]*", var)[0]
+                                    res['assignment'] = var
                                     res['lineNumber'] = item['lineNumber']
                                     allres.append(res)
                                     print(res)
