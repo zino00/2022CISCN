@@ -9,15 +9,16 @@ description: 该文件需要设置 C_source_dir、SC_path、sensitive_funcname_t
 '''
 
 # c 源文件目录
-C_source_dir = "/home/sung/Desktop/joern/Juliet_Test_Suite_v1.3_for_C_Cpp/C/testcases/"
+C_source_dir = "/home/yuhan/桌面/Juliet/C/testcases2/"
 # Joern 运行的 .sc 脚本
-SC_path = '/home/sung/Desktop/joern/script/cpg_extract.sc'
+SC_path = '/home/yuhan/桌面/2022CISCN/slice/cpg_extract.sc'
 # txt 文件路径 包含敏感函数名
-sensitive_funcname_txt_path = "/home/sung/Desktop/joern/script/sensitive_funcname.txt"
+sensitive_funcname_txt_path = "/home/yuhan/桌面/2022CISCN/slice/sensitive_funcname.txt"
 
 '''
 description: 将 txt 文件里面的内容提取到一个 function_list 列表
 param {string} txt_path: txt 文件路径
+
 return {list} function_list: 返回 function_list 列表
 '''
 
@@ -38,12 +39,18 @@ param {list} function_list
 
 
 def c2res(c_Filename, function_list):
+    result_file_path = ""
     for filepath, dirnames, filenames in os.walk(C_source_dir):
         flag = False
         for item in filenames:
             if c_Filename == item:
                 c_file_path = filepath + '/' + item
                 c_file_dir = filepath
+                result_filename = c_Filename[:-2] + '_res.json'
+                result_file_path = c_file_dir + '/' + result_filename
+                # already create json
+                if os.path.exists(result_file_path):
+                    return result_file_path
                 # parse source code into cpg
                 print('parsing source code into cpg...')
                 print(c_file_path + "\n")
@@ -63,10 +70,12 @@ def c2res(c_Filename, function_list):
                     ",outFile=" + json_file_path
                 subprocess.call(shell_command, shell=True)
                 # json into result
-                result_filename = c_Filename[:-2] + '_res.json'
-                result_file_path = c_file_dir + '/' + result_filename
                 with open(json_file_path) as file:
                     properties_data = json.load(file)
+                shell_command = "rm "+json_file_path
+                subprocess.call(shell_command, shell=True)
+                shell_command = "rm " + cpg_file_path
+                subprocess.call(shell_command, shell=True)
                 with open(result_file_path, 'w') as result:
                     allres = []
                     variable_list = []
@@ -76,7 +85,8 @@ def c2res(c_Filename, function_list):
                     for item in properties_data:
                         if ('*' in item['code'] or '[' in item['code']) and item['_label'] == "LOCAL":
                             res = {}
-                            res['variable'] = item['name']
+                            var=re.findall(r"[_a-zA-Z][_a-zA-Z0-9]*",item['name'])[0]
+                            res['variable'] =var
                             res['lineNumber'] = item['lineNumber']
                             allres.append(res)
                             print(res)
@@ -84,15 +94,16 @@ def c2res(c_Filename, function_list):
                             for var in variable_list:
                                 if var in re.split('=', item['code'])[1]:
                                     res = {}
-                                    res['assignment'] = re.split(
-                                        '=', item['code'])[0]
+                                    var=re.split('=', item['code'])[0]
+                                    var=re.findall(r"[_a-zA-Z][_a-zA-Z0-9]*",var)[0]
+                                    res['assignment']=var
                                     res['lineNumber'] = item['lineNumber']
                                     allres.append(res)
                                     print(res)
                                     break
                         elif function_list.count(item['name']) != 0 and item['_label'] == "CALL":
                             res = {}
-                            res['function'] = item['name']
+                            res['function'] = item['name'].strip()
                             res['lineNumber'] = item['lineNumber']
                             allres.append(res)
                             print(res)
@@ -102,6 +113,7 @@ def c2res(c_Filename, function_list):
                     break
         if flag == True:
             break
+    return result_file_path
 
 
 '''
@@ -126,7 +138,7 @@ if __name__ == "__main__":
     function_list = get_all_function_list(sensitive_funcname_txt_path)
     # 分析 C_source_dir + "CWE15_External_Control_of_System_or_Configuration_Setting/" 目录下面的c文件
     test_c2res(C_source_dir +
-               "CWE15_External_Control_of_System_or_Configuration_Setting/", function_list)
+               "CWE835_Infinite_Loop/", function_list)
     # 删掉joern 保存的 workspace 目录
     rm_command = "rm -rf ./workspace"
     subprocess.call(rm_command, shell=True)
