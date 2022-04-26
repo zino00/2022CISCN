@@ -17,25 +17,15 @@ current_dir_path = '/home/yuhan/桌面/Juliet_Test_Suite_v1.3_for_C_Cpp/C'
 dg_tools_path = '/home/yuhan/dg/tools'
 
 # 未连接bc文件目录的路径
-unlinked_bc_dir_path = '/home/yuhan/桌面/Juliet/C/unlinked_bcfile2'
+unlinked_bc_dir_path = '/home/yuhan/桌面/Juliet/C/unlinked_bcfile'
 # 连接后bc文件目录的路径
-bc_dir_path = '/home/yuhan/桌面/Juliet/C/bcfile2'
+bc_dir_path = '/home/yuhan/桌面/Juliet/C/bcfile'
 # 切片结果目录的路径
-result_dir = '/home/yuhan/桌面/Juliet/C/result2'
+result_dir = '/home/yuhan/桌面/Juliet/C/slice_file'
 
-
-# #计数
-# count_c=0
-# count_bc=0
-# count_linked_bc=0
-# count_xml=0
-# count_bc_sliced=0
-# count_ll=0
 
 # dir_name:当前所在文件夹，dir_path:被遍历目录的路径，result_dir_name：结果所在的目录名
 def generate_bc(dir_name, dir_path, result_dir_name):
-    # global count_c
-    # global count_bc
     # 若不存在bc文件保存的路径,则创建
     if os.path.exists(unlinked_bc_dir_path) == 0:
         command = 'mkdir '+unlinked_bc_dir_path
@@ -63,14 +53,12 @@ def generate_bc(dir_name, dir_path, result_dir_name):
                 command = "mkdir "+unlinked_bc_dir_path+'/'+result_dir_name
                 os.system(command)
             if src_filename[-2:] == '.c' or src_filename == 'main.cpp' or src_filename == 'main_linux.cpp':
-                # count_c=count_c+1
                 file_name = src_filename[:src_filename.find('.')]
                 # 若该文件bc已生成,则遍历下一个
                 if os.path.exists(unlinked_bc_dir_path + '/' + result_dir_name + '/' + file_name + '.bc') > 0:
-                    # count_bc = count_bc+1
                     continue
                 # 编译命令
-                command = llvm_build+'/bin/clang -c -g -I '+support_dir_path+' -emit-llvm -Xclang -disable-O0-optnone ' + \
+                command = llvm_build+'/bin/clang -c -g  -I '+support_dir_path+' -emit-llvm -Xclang -disable-O0-optnone ' + \
                     dir_path+'/'+src_filename+' -o ' + unlinked_bc_dir_path + \
                     '/' + result_dir_name + '/' + file_name + '.bc'
                 # print(command)
@@ -78,17 +66,18 @@ def generate_bc(dir_name, dir_path, result_dir_name):
                 if os.path.exists(unlinked_bc_dir_path+'/'+result_dir_name + '/' + file_name + '.bc') == 0:
                     success = 0
                     break
-                # else:
-                    # count_bc=count_bc+1
-    # 若编译失败，则删除该c文件对应结果子文件夹的所有文件
+    # 若编译失败，则删除该c文件所在文件夹和对应结果子文件夹的所有文件
     if success == 0:
+        command = 'rm -rf '+dir_path
+        print(command)
+        os.system(command)
         command = 'rm -rf '+unlinked_bc_dir_path+'/'+result_dir_name
         os.system(command)
 
 
 def link():
     '''
-    连接,被run_dg()调用
+    连接,在get_vul_candidate()中调用
     '''
     # 创建连接后的bc所在文件夹
     if os.path.exists(bc_dir_path) == 0:
@@ -121,83 +110,122 @@ def link():
     return bc_c_dict
 
 
-def run_dg():
-    # global count_bc_sliced
-    # global count_ll
+def get_vul_candidate():
+    '''
+    得到每个bc文件的漏洞候选,在run_dg()中被调用
+    '''
     # 得到字典key:bc文件名,value:对应c文件名
     bc_c_dict = link()
     # 得到敏感函数列表 function_list
     function_list = get_vul_linenumber.get_all_function_list(
         sensitive_funcname_txt_path)
+    # 遍历bc文件夹中的bc文件
+    bc_names = os.listdir(bc_dir_path)
+    #(bc_name,function,linenumber{})的映射
+    vul_candidate_func = {}
+    #(bc_name,variable,linenumber{})的映射
+    vul_candidate_var = {}
+    # 遍历bc文件,得到漏洞候选
+    for bc_name in bc_names:
+        if bc_name[-3:] == 'xml':
+            continue       
+        # 所有切片都成功的标志
+        flag = 1
+        vul_candidate_func[bc_name] = {}
+        vul_candidate_var[bc_name] = {}
+        # 遍历该bc文件对应的c文件
+        for c_name in bc_c_dict[bc_name]:
+            name_line_json_file = open(
+                get_vul_linenumber.c2res(bc_name[:-3]+'/'+c_name, function_list))
+            print(name_line_json_file)
+            name_line_json = json.load(name_line_json_file)
+            # 遍历漏洞候选的定位
+            for name_line in name_line_json:
+                line=name_line['lineNumber']
+                if 'function' in name_line:
+                    func = name_line['function']
+                    if  func not in vul_candidate_func[bc_name]:
+                        vul_candidate_func[bc_name][func]=[]
+                    vul_candidate_func[bc_name][func].append(line) 
+                elif 'variable' in name_line or 'assignment' in name_line:
+                    if 'variable' in name_line:
+                        var = name_line['variable']
+                    else:
+                        var = name_line['assignment']
+                    if  var not in vul_candidate_var[bc_name]:
+                        vul_candidate_var[bc_name][var]=[]
+                    vul_candidate_var[bc_name][var].append(line) 
+    return vul_candidate_func, vul_candidate_var
+
+
+def run_dg():
+    # 得到漏洞候选字典
+    vul_candidate_func, vul_candidate_var = get_vul_candidate()
+    # 创建切片结果文件夹
     if os.path.exists(result_dir) == 0:
         command = 'mkdir '+result_dir
         os.system(command)
-    # 遍历bc文件夹中的bc文件
     bc_names = os.listdir(bc_dir_path)
-    # 遍历bc文件
     for bc_name in bc_names:
-        # 创建该bc文件在结果文件夹下的子文件夹
+        input_path = bc_dir_path+'/'+bc_name
+        if bc_name[-3:] == 'xml':
+            continue
+        # 创建该bc文件在切片结果文件夹下的子文件夹
         result_child_dir = result_dir+'/'+bc_name[:-3]
         if os.path.exists(result_child_dir) == 0:
             command = 'mkdir '+result_child_dir
             os.system(command)
-        # 所有切片都成功的标志
-        flag = 1
-        # 遍历该bc文件对应的c文件
-        for c_name in bc_c_dict[bc_name]:
-            name_line_json_file = open(
-                get_vul_linenumber.c2res(c_name, function_list))
-            print(name_line_json_file)
-            name_line_json = json.load(name_line_json_file)
-            input_path = bc_dir_path+'/'+bc_name
-            # 遍历漏洞候选的定位
-            for name_line in name_line_json:
-                output_path = result_child_dir
-                command = dg_tools_path+'/llvm-slicer '
-                if 'function' in name_line:
-                    func = name_line['function']
-                    output_path = output_path+'/'+func+'.ll'
-                    command = command+'-c ' + func + ' '+input_path+' -o '+output_path
-                elif 'variable' in name_line:
-                    var = name_line['variable']
-                    line = name_line['lineNumber']
-                    output_path = output_path+'/'+var+'_'+str(line)
-                    command = command+'-sc ' + \
-                        str(line)+':'+var + ' '+input_path+' -o '+output_path
-                elif 'assignment' in name_line:
-                    var = name_line['assignment']
-                    line = name_line['lineNumber']
-                    output_path = output_path+'/'+var+'_'+str(line)
-                    command = command+'-sc ' + \
-                        str(line)+':'+var + ' '+input_path+' -o '+output_path
-                else:
+        # 对漏洞候选的库函数进行切片
+        for func in vul_candidate_func[bc_name]:
+            output_path = result_child_dir+'/'+func
+            if os.path.exists(output_path) > 0:
+                continue
+            command = dg_tools_path+'/llvm-slicer '+'-c ' + \
+                func + ' '+input_path+' -o '+output_path
+            print(command)
+            os.system(command)
+            command = 'llvm-dis ' + output_path
+            print(command)
+            os.system(command)
+        # 得到拥有函数-变量名-行号信息的xml
+        if os.path.exists(bc_dir_path+'/'+bc_name[:-3]+'.xml') == 0:
+            command = "./tag/build/IRHandler "+bc_dir_path+'/'+bc_name + \
+                ' --selector=getModuleInfo --xml-path=' + \
+                bc_dir_path+'/'+bc_name[:-3]+'.xml'
+            os.system(command)
+            print(command)
+        var_line = tag.readModuleInfoXML.getModuleInfo(bc_dir_path+'/'+bc_name[:-3]+'.xml')
+        # 对漏洞候选的变量进行切片
+        for func in var_line:
+            for var, line in var_line[func]:
+                if var not in vul_candidate_var[bc_name]:
                     continue
+                if int(line) not in vul_candidate_var[bc_name][var]:
+                    continue
+                output_path = result_child_dir+'/'+var+'_'+line+'_'+func
                 if os.path.exists(output_path) > 0:
                     continue
-                print(c_name)
+                command = dg_tools_path+'/llvm-slicer '+'-sc ' + \
+                    str(line)+':'+var + " -entry "+func + \
+                    ' '+input_path+' -o '+output_path
                 print(command)
                 os.system(command)
-                command = 'llvm-dis ' + output_path
-                print(command)
-                os.system(command)
-                # 切片失败则删除该bc文件对应的结果文件夹
+                # command = 'llvm-dis ' + output_path
+                # print(command)
+                # os.system(command)                
+            # #切片失败则删除该bc文件对应的结果文件夹
             #     if os.path.exists(output_path) == 0:
             #         flag = 0
             #         command = 'rm -rf '+result_child_dir
             #         os.system(command)
             #         break
-            if flag == 0:
-                break
-        # count_bc_sliced=count_bc_sliced+1
+        # if flag == 0:
+        #     break
 
 
 if __name__ == "__main__":
     generate_bc(src_dir_path, '', '')
     run_dg()
-    # print("成功对"+str(count_bc_sliced)+"个文件进行切片，得到"+str(count_ll)+"个切片"+'\n')
-    # print('\n')
-    # print('c文件共'+str(count_c)+"个，其中"+str(count_bc)+"个成功转为ir")
-    # my_delete()
 
 # def getInfo():
 #     # global count_xml
