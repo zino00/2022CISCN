@@ -25,54 +25,55 @@ result_dir = '/home/yuhan/桌面/Juliet/C/slice_file'
 
 
 # dir_name:当前所在文件夹，dir_path:被遍历目录的路径，result_dir_name：结果所在的目录名
-def generate_bc(dir_name, dir_path, result_dir_name):
+def generate_bc():
     # 若不存在bc文件保存的路径,则创建
     if os.path.exists(unlinked_bc_dir_path) == 0:
         command = 'mkdir '+unlinked_bc_dir_path
         os.system(command)
-    if dir_path != '':
-        dir_path = dir_path+'/'
-    dir_path = dir_path+dir_name
-    # 结果子目录名
-    if result_dir_name != '':
-        result_dir_name = result_dir_name+'_'
-    if dir_name != src_dir_path:
-        result_dir_name = result_dir_name+dir_name
-    dirs = os.listdir(dir_path)
-    success = 1
-    for dir in dirs:
-        # 判断是否是子目录,若是，则进入目录
-        if os.path.isdir(dir_path+'/'+dir) == True:
-            generate_bc(dir, dir_path, result_dir_name)
-        # 对于c文件，进行转化
-        else:
-            # # 结果子目录名与c文件的相同
-            # result_dir_name = dir_name
-            src_filename = dir
-            if os.path.exists(unlinked_bc_dir_path+'/'+result_dir_name) == 0:
-                command = "mkdir "+unlinked_bc_dir_path+'/'+result_dir_name
-                os.system(command)
-            if src_filename[-2:] == '.c' or src_filename == 'main.cpp' or src_filename == 'main_linux.cpp':
-                file_name = src_filename[:src_filename.find('.')]
-                # 若该文件bc已生成,则遍历下一个
-                if os.path.exists(unlinked_bc_dir_path + '/' + result_dir_name + '/' + file_name + '.bc') > 0:
-                    continue
-                # 编译命令
-                command = llvm_build+'/bin/clang -c -g  -I '+support_dir_path+' -emit-llvm -Xclang -disable-O0-optnone ' + \
-                    dir_path+'/'+src_filename+' -o ' + unlinked_bc_dir_path + \
-                    '/' + result_dir_name + '/' + file_name + '.bc'
-                # print(command)
-                os.system(command)
-                if os.path.exists(unlinked_bc_dir_path+'/'+result_dir_name + '/' + file_name + '.bc') == 0:
-                    success = 0
-                    break
-    # 若编译失败，则删除该c文件所在文件夹和对应结果子文件夹的所有文件
-    if success == 0:
-        command = 'rm -rf '+dir_path
-        print(command)
-        os.system(command)
-        command = 'rm -rf '+unlinked_bc_dir_path+'/'+result_dir_name
-        os.system(command)
+    for current_filepath, src_dirnames, filenames in os.walk(src_dir_path):
+        # 遍历os.walk得到的最底层的文件夹
+        for src_dirname in src_dirnames:
+            src_filenames = os.listdir(current_filepath+'/'+src_dirname)
+            # 若目录下不是c文件,是目录,则跳过
+            if len(src_filenames)>0 and os.path.isdir(current_filepath+'/'+src_dirname+'/'+src_filenames[0])>0:
+                continue
+            # 结果子目录名与c文件的完全相同
+            unlinked_bc_child_dir_name = current_filepath[current_filepath.find(
+                src_dir_path)+len(src_dir_path):]+'/'+src_dirname
+            unlinked_bc_child_dir_path = unlinked_bc_dir_path+'/'+unlinked_bc_child_dir_name
+            # 若不存在bc文件保存的子目录,则创建
+            command = "mkdir "+unlinked_bc_dir_path
+            for dir_name in unlinked_bc_child_dir_name.split('/'):
+                command = command+'/'+dir_name
+                if os.path.exists(command[command.find("mkdir ")+len("mkdir "):]) == 0:
+                    os.system(command)
+            # 对于c文件，进行转化
+            for src_filename in src_filenames:
+                # 若有非main的cpp文件，则删除该c文件所在文件夹和对应结果子文件夹的所有文件
+                if src_filename[-4:] == '.cpp' and src_filename != 'main.cpp' and src_filename != 'main_linux.cpp':
+                        command = 'rm -rf '+current_filepath+'/'+src_dirname
+                        os.system(command)
+                        command = 'rm -rf '+unlinked_bc_child_dir_path
+                        os.system(command)
+                        break
+                if src_filename[-2:] == '.c' or src_filename == 'main.cpp' or src_filename == 'main_linux.cpp':
+                    file_name = src_filename[:src_filename.find('.')]
+                    # 若该文件bc已生成,则遍历下一个
+                    if os.path.exists(unlinked_bc_child_dir_path+'/' + file_name + '.bc') > 0:
+                        continue
+                    # 编译命令
+                    command = llvm_build+'/bin/clang -c -g  -I '+support_dir_path+' -emit-llvm -Xclang -disable-O0-optnone ' + \
+                        current_filepath+'/'+src_dirname+'/'+src_filename+' -o ' + \
+                        unlinked_bc_child_dir_path + '/' + file_name + '.bc'
+                    print(command)
+                    os.system(command)
+                    # 若编译失败，则删除该c文件所在文件夹和对应结果子文件夹的所有文件
+                    if os.path.exists(unlinked_bc_child_dir_path + '/' + file_name + '.bc') == 0:
+                        command = 'rm -rf '+current_filepath+'/'+src_dirname
+                        os.system(command)
+                        command = 'rm -rf '+unlinked_bc_child_dir_path
+                        os.system(command)
+                        break
 
 
 def link():
@@ -84,29 +85,46 @@ def link():
         command = 'mkdir '+bc_dir_path
         os.system(command)
     bc_c_dict = {}  # key:连接后的bc名, value:由被连接bc对应c文件名构成的列表
-    unlinked_bc_dirs = os.listdir(unlinked_bc_dir_path)
-    for unlinked_bc_dir in unlinked_bc_dirs:
-        unlinked_bc_child_dir_path = unlinked_bc_dir_path+'/'+unlinked_bc_dir
-        unlinked_bc_names = os.listdir(unlinked_bc_child_dir_path)
-        command = llvm_build+"/bin/llvm-link "
-        bc_c_dict[unlinked_bc_dir+".bc"] = []
-        # 若有main_linux.bc存在,则不需要连接main.bc
-        main_linux_exist = 0
-        for unlinked_bc_name in unlinked_bc_names:
-            if unlinked_bc_name == "main_linux.bc":
-                main_linux_exist = 1
-                break
-        for unlinked_bc_name in unlinked_bc_names:
-            if main_linux_exist == 1 and unlinked_bc_name == "main.bc":
+    for current_filepath, unlinked_bc_child_dirnames, filenames in os.walk(unlinked_bc_dir_path):
+        for unlinked_bc_child_dirname in unlinked_bc_child_dirnames:
+            unlinked_bc_child_dir_path = current_filepath+'/'+unlinked_bc_child_dirname
+            unlinked_bc_names = os.listdir(unlinked_bc_child_dir_path)
+            # 若目录下不是bc文件,是目录,则跳过
+            if len(unlinked_bc_names)>0 and os.path.isdir(unlinked_bc_child_dir_path+'/'+unlinked_bc_names[0]):
                 continue
-            if unlinked_bc_name[0:4] == "main":
-                c_name = unlinked_bc_name[:-3]+".cpp"
-            else:
-                c_name = unlinked_bc_name[:-3]+".c"
-            bc_c_dict[unlinked_bc_dir+".bc"].append(c_name)
-            command = command+unlinked_bc_child_dir_path+'/'+unlinked_bc_name+" "
-        command = command+"-o "+bc_dir_path+'/'+unlinked_bc_dir+".bc"
-        os.system(command)
+            # 未连接的bc相对于所有bc文件所在目录的路径
+            unlinked_bc_relative_path=unlinked_bc_child_dir_path[unlinked_bc_child_dir_path.find(
+                unlinked_bc_dir_path)+len(unlinked_bc_dir_path):]
+            # 连接后的bc名
+            bc_name = unlinked_bc_relative_path[1:].replace('/', '_')+'.bc'
+            command = llvm_build+"/bin/llvm-link "
+            bc_c_dict[bc_name] = []
+            # 若有main_linux.bc存在,则不需要连接main.bc
+            main_linux_exist = 0
+            for unlinked_bc_name in unlinked_bc_names:
+                if unlinked_bc_name == "main_linux.bc":
+                    main_linux_exist = 1
+                    break
+            # 遍历为连接的bc,更新command,并保存c文件相对于所有c文件所在目录的路径
+            for unlinked_bc_name in unlinked_bc_names:
+                if main_linux_exist == 1 and unlinked_bc_name == "main.bc":
+                    continue
+                if unlinked_bc_name[0:4] == "main":
+                    c_name = unlinked_bc_name[:-3]+".cpp"
+                else:
+                    c_name = unlinked_bc_name[:-3]+".c"
+                bc_c_dict[bc_name].append(unlinked_bc_relative_path+'/'+c_name)
+                command = command+unlinked_bc_child_dir_path+'/'+unlinked_bc_name+" "
+            command = command+"-o "+bc_dir_path+'/'+bc_name
+            # 若已存在连接后的bc,则不执行连接命令
+            if os.path.exists(bc_dir_path+'/'+bc_name) > 0:
+                continue
+            print(bc_dir_path+'/'+bc_name)
+            # 确认有至少2个文件存在,执行连接
+            if len(unlinked_bc_names)>1:
+                os.system(command)
+            elif len(unlinked_bc_names) ==1:
+                command="mv "+unlinked_bc_child_dir_path+'/'+unlinked_bc_names[0]+" -o "+bc_dir_path+'/'+bc_name
     return bc_c_dict
 
 
@@ -121,40 +139,40 @@ def get_vul_candidate():
         sensitive_funcname_txt_path)
     # 遍历bc文件夹中的bc文件
     bc_names = os.listdir(bc_dir_path)
-    #(bc_name,function,linenumber{})的映射
+    # (bc_name,function,linenumber{})的映射
     vul_candidate_func = {}
-    #(bc_name,variable,linenumber{})的映射
+    # (bc_name,variable,linenumber{})的映射
     vul_candidate_var = {}
     # 遍历bc文件,得到漏洞候选
     for bc_name in bc_names:
         if bc_name[-3:] == 'xml':
-            continue       
+            continue
         # 所有切片都成功的标志
         flag = 1
         vul_candidate_func[bc_name] = {}
         vul_candidate_var[bc_name] = {}
         # 遍历该bc文件对应的c文件
-        for c_name in bc_c_dict[bc_name]:
+        for c_path in bc_c_dict[bc_name]:
             name_line_json_file = open(
-                get_vul_linenumber.c2res(bc_name[:-3]+'/'+c_name, function_list))
+                get_vul_linenumber.c2res(c_path, function_list))
             print(name_line_json_file)
             name_line_json = json.load(name_line_json_file)
             # 遍历漏洞候选的定位
             for name_line in name_line_json:
-                line=name_line['lineNumber']
+                line = name_line['lineNumber']
                 if 'function' in name_line:
                     func = name_line['function']
-                    if  func not in vul_candidate_func[bc_name]:
-                        vul_candidate_func[bc_name][func]=[]
-                    vul_candidate_func[bc_name][func].append(line) 
+                    if func not in vul_candidate_func[bc_name]:
+                        vul_candidate_func[bc_name][func] = []
+                    vul_candidate_func[bc_name][func].append(line)
                 elif 'variable' in name_line or 'assignment' in name_line:
                     if 'variable' in name_line:
                         var = name_line['variable']
                     else:
                         var = name_line['assignment']
-                    if  var not in vul_candidate_var[bc_name]:
-                        vul_candidate_var[bc_name][var]=[]
-                    vul_candidate_var[bc_name][var].append(line) 
+                    if var not in vul_candidate_var[bc_name]:
+                        vul_candidate_var[bc_name][var] = []
+                    vul_candidate_var[bc_name][var].append(line)
     return vul_candidate_func, vul_candidate_var
 
 
@@ -194,7 +212,8 @@ def run_dg():
                 bc_dir_path+'/'+bc_name[:-3]+'.xml'
             os.system(command)
             print(command)
-        var_line = tag.readModuleInfoXML.getModuleInfo(bc_dir_path+'/'+bc_name[:-3]+'.xml')
+        var_line = tag.readModuleInfoXML.getModuleInfo(
+            bc_dir_path+'/'+bc_name[:-3]+'.xml')
         # 对漏洞候选的变量进行切片
         for func in var_line:
             for var, line in var_line[func]:
@@ -212,7 +231,7 @@ def run_dg():
                 os.system(command)
                 # command = 'llvm-dis ' + output_path
                 # print(command)
-                # os.system(command)                
+                # os.system(command)
             # #切片失败则删除该bc文件对应的结果文件夹
             #     if os.path.exists(output_path) == 0:
             #         flag = 0
@@ -224,7 +243,7 @@ def run_dg():
 
 
 if __name__ == "__main__":
-    generate_bc(src_dir_path, '', '')
+    generate_bc()
     run_dg()
 
 # def getInfo():
