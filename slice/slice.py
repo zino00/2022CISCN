@@ -1,7 +1,9 @@
 import os
 import json
+import pickle
 import tag.readModuleInfoXML
 import get_vul_linenumber
+import subprocess
 # c文件目录路径
 src_dir_path = get_vul_linenumber.C_source_dir
 # txt 文件路径 包含敏感函数名
@@ -11,11 +13,15 @@ support_dir_path = "/home/yuhan/桌面/Juliet/C/testcasesupport"
 # llvm的安装路径
 llvm_build = '/usr/lib/llvm-12'
 
-# 当前文件夹的路径
-current_dir_path = '/home/yuhan/桌面/Juliet_Test_Suite_v1.3_for_C_Cpp/C'
+# 工作所在文件夹的路径
+current_dir_path = '/home/yuhan/桌面/Juliet/C'
+# 漏洞字典的路径
+vul_candidate_func_path = current_dir_path+'/'+'vul_candidate_func.pkl'
+vul_candidate_var_path = current_dir_path+'/'+'vul_candidate_var.pkl'
+# 错误命令的路径
+error_command_file_path = current_dir_path+'/error.txt'
 # dg工具的路径
 dg_tools_path = '/home/yuhan/dg/tools'
-
 # 未连接bc文件目录的路径
 unlinked_bc_dir_path = '/home/yuhan/桌面/Juliet/C/unlinked_bcfile'
 # 连接后bc文件目录的路径
@@ -26,6 +32,7 @@ result_dir = '/home/yuhan/桌面/Juliet/C/slice_file'
 
 # dir_name:当前所在文件夹，dir_path:被遍历目录的路径，result_dir_name：结果所在的目录名
 def generate_bc():
+
     # 若不存在bc文件保存的路径,则创建
     if os.path.exists(unlinked_bc_dir_path) == 0:
         command = 'mkdir '+unlinked_bc_dir_path
@@ -35,7 +42,7 @@ def generate_bc():
         for src_dirname in src_dirnames:
             src_filenames = os.listdir(current_filepath+'/'+src_dirname)
             # 若目录下不是c文件,是目录,则跳过
-            if len(src_filenames)>0 and os.path.isdir(current_filepath+'/'+src_dirname+'/'+src_filenames[0])>0:
+            if len(src_filenames) > 0 and os.path.isdir(current_filepath+'/'+src_dirname+'/'+src_filenames[0]) > 0:
                 continue
             # 结果子目录名与c文件的完全相同
             unlinked_bc_child_dir_name = current_filepath[current_filepath.find(
@@ -51,11 +58,11 @@ def generate_bc():
             for src_filename in src_filenames:
                 # 若有非main的cpp文件，则删除该c文件所在文件夹和对应结果子文件夹的所有文件
                 if src_filename[-4:] == '.cpp' and src_filename != 'main.cpp' and src_filename != 'main_linux.cpp':
-                        command = 'rm -rf '+current_filepath+'/'+src_dirname
-                        os.system(command)
-                        command = 'rm -rf '+unlinked_bc_child_dir_path
-                        os.system(command)
-                        break
+                    command = 'rm -rf '+current_filepath+'/'+src_dirname
+                    os.system(command)
+                    command = 'rm -rf '+unlinked_bc_child_dir_path
+                    os.system(command)
+                    break
                 if src_filename[-2:] == '.c' or src_filename == 'main.cpp' or src_filename == 'main_linux.cpp':
                     file_name = src_filename[:src_filename.find('.')]
                     # 若该文件bc已生成,则遍历下一个
@@ -74,6 +81,8 @@ def generate_bc():
                         command = 'rm -rf '+unlinked_bc_child_dir_path
                         os.system(command)
                         break
+    # 删除空文件夹
+    command = 'rmdir '+src_dir_path+'/* && rmdir '+unlinked_bc_dir_path+'/*'
 
 
 def link():
@@ -90,10 +99,10 @@ def link():
             unlinked_bc_child_dir_path = current_filepath+'/'+unlinked_bc_child_dirname
             unlinked_bc_names = os.listdir(unlinked_bc_child_dir_path)
             # 若目录下不是bc文件,是目录,则跳过
-            if len(unlinked_bc_names)>0 and os.path.isdir(unlinked_bc_child_dir_path+'/'+unlinked_bc_names[0]):
+            if len(unlinked_bc_names) > 0 and os.path.isdir(unlinked_bc_child_dir_path+'/'+unlinked_bc_names[0]):
                 continue
             # 未连接的bc相对于所有bc文件所在目录的路径
-            unlinked_bc_relative_path=unlinked_bc_child_dir_path[unlinked_bc_child_dir_path.find(
+            unlinked_bc_relative_path = unlinked_bc_child_dir_path[unlinked_bc_child_dir_path.find(
                 unlinked_bc_dir_path)+len(unlinked_bc_dir_path):]
             # 连接后的bc名
             bc_name = unlinked_bc_relative_path[1:].replace('/', '_')+'.bc'
@@ -121,10 +130,11 @@ def link():
                 continue
             print(bc_dir_path+'/'+bc_name)
             # 确认有至少2个文件存在,执行连接
-            if len(unlinked_bc_names)>1:
+            if len(unlinked_bc_names) > 1:
                 os.system(command)
-            elif len(unlinked_bc_names) ==1:
-                command="mv "+unlinked_bc_child_dir_path+'/'+unlinked_bc_names[0]+" -o "+bc_dir_path+'/'+bc_name
+            elif len(unlinked_bc_names) == 1:
+                command = "mv "+unlinked_bc_child_dir_path+'/' + \
+                    unlinked_bc_names[0]+" -o "+bc_dir_path+'/'+bc_name
     return bc_c_dict
 
 
@@ -145,7 +155,7 @@ def get_vul_candidate():
     vul_candidate_var = {}
     # 遍历bc文件,得到漏洞候选
     for bc_name in bc_names:
-        if bc_name[-3:] == 'xml':
+        if bc_name[-2:] != 'bc':
             continue
         # 所有切片都成功的标志
         flag = 1
@@ -173,12 +183,20 @@ def get_vul_candidate():
                     if var not in vul_candidate_var[bc_name]:
                         vul_candidate_var[bc_name][var] = []
                     vul_candidate_var[bc_name][var].append(line)
+        with open(vul_candidate_func_path, 'wb') as file:
+            pickle.dump(vul_candidate_func, file)
+        with open(vul_candidate_var_path, 'wb') as file:
+            pickle.dump(vul_candidate_var, file)
     return vul_candidate_func, vul_candidate_var
 
 
 def run_dg():
-    # 得到漏洞候选字典
-    vul_candidate_func, vul_candidate_var = get_vul_candidate()
+    count=0
+    if os.path.exists(vul_candidate_func_path) and os.path.exists(vul_candidate_var_path):
+        vul_candidate_func = pickle.load(open(vul_candidate_func_path, 'rb'))
+        vul_candidate_var = pickle.load(open(vul_candidate_var_path, 'rb'))
+    else:
+        vul_candidate_func, vul_candidate_var = get_vul_candidate()
     # 创建切片结果文件夹
     if os.path.exists(result_dir) == 0:
         command = 'mkdir '+result_dir
@@ -186,25 +204,38 @@ def run_dg():
     bc_names = os.listdir(bc_dir_path)
     for bc_name in bc_names:
         input_path = bc_dir_path+'/'+bc_name
-        if bc_name[-3:] == 'xml':
+        if bc_name[-2:] != 'bc':
             continue
         # 创建该bc文件在切片结果文件夹下的子文件夹
         result_child_dir = result_dir+'/'+bc_name[:-3]
         if os.path.exists(result_child_dir) == 0:
             command = 'mkdir '+result_child_dir
             os.system(command)
+        if os.path.exists(error_command_file_path) == 0:
+            command = 'touch '+error_command_file_path
+            os.system(command)
+        with open(error_command_file_path, 'r') as error_command_file:
+            error_command = error_command_file.readlines()
         # 对漏洞候选的库函数进行切片
         for func in vul_candidate_func[bc_name]:
             output_path = result_child_dir+'/'+func
+            # 若已存在该切片，则跳过
             if os.path.exists(output_path) > 0:
+                count+=1
                 continue
             command = dg_tools_path+'/llvm-slicer '+'-c ' + \
                 func + ' '+input_path+' -o '+output_path
+            # 若为错误命令，则跳过
+            if command+'\n' in error_command:
+                continue
             print(command)
             os.system(command)
-            command = 'llvm-dis ' + output_path
-            print(command)
-            os.system(command)
+            # 如果切片失败
+            if os.path.exists(output_path) == 0:
+                command2 = "echo \""+command+"\" >> "+error_command_file_path
+                os.system(command2)
+            else:
+                count+=1
         # 得到拥有函数-变量名-行号信息的xml
         if os.path.exists(bc_dir_path+'/'+bc_name[:-3]+'.xml') == 0:
             command = "./tag/build/IRHandler "+bc_dir_path+'/'+bc_name + \
@@ -222,25 +253,23 @@ def run_dg():
                 if int(line) not in vul_candidate_var[bc_name][var]:
                     continue
                 output_path = result_child_dir+'/'+var+'_'+line+'_'+func
+                # 若已存在该切片，则跳过
                 if os.path.exists(output_path) > 0:
+                    count+=1
                     continue
                 command = dg_tools_path+'/llvm-slicer '+'-sc ' + \
                     str(line)+':'+var + " -entry "+func + \
                     ' '+input_path+' -o '+output_path
+                if command+'\n' in error_command:
+                    continue
                 print(command)
                 os.system(command)
-                # command = 'llvm-dis ' + output_path
-                # print(command)
-                # os.system(command)
-            # #切片失败则删除该bc文件对应的结果文件夹
-            #     if os.path.exists(output_path) == 0:
-            #         flag = 0
-            #         command = 'rm -rf '+result_child_dir
-            #         os.system(command)
-            #         break
-        # if flag == 0:
-        #     break
-
+                if os.path.exists(output_path) == 0:
+                    command2 = "echo \""+command+"\" >> "+error_command_file_path
+                    os.system(command2)
+                else:
+                    count+=1
+    print(count)
 
 if __name__ == "__main__":
     generate_bc()
