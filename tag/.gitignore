@@ -5,3 +5,5 @@
 **/*.bc
 .vscode/
 .gdb_history
+build/
+test*
