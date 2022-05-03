@@ -3,17 +3,18 @@ import os
 import time
 import json
 import re
+import path_required
 '''
 description: 该文件需要设置 C_source_dir、SC_path、sensitive_funcname_txt_path
 运行命令: python3 ./get_vul_linenumber
 '''
 
 # c 源文件目录
-C_source_dir = "/home/yuhan/桌面/Juliet/C/testcases2/"
+C_source_dir = path_required.src_dir_path+'/'
 # Joern 运行的 .sc 脚本
-SC_path = '/home/yuhan/桌面/2022CISCN/slice/cpg_extract.sc'
+SC_path = path_required.SC_path
 # txt 文件路径 包含敏感函数名
-sensitive_funcname_txt_path = "/home/yuhan/桌面/2022CISCN/slice/sensitive_funcname.txt"
+sensitive_funcname_txt_path = path_required.sensitive_funcname_txt_path
 
 
 def get_all_function_list(txt_path):
@@ -94,7 +95,7 @@ def c2res(c_Filename, function_list):
                             print(res)
                         elif '<operator>.assignment' == item['name'] and item['_label'] == "CALL":
                             for var in variable_list:
-                                if var in re.split('=', item['code'])[1]:
+                                if '=' in item['code'] and var in re.split('=', item['code'])[1]:
                                     res = {}
                                     var = re.split('=', item['code'])[0]
                                     var = re.findall(
@@ -138,8 +139,9 @@ if __name__ == "__main__":
     # 得到敏感函数列表 function_list
     function_list = get_all_function_list(sensitive_funcname_txt_path)
     # 分析 C_source_dir + "CWE15_External_Control_of_System_or_Configuration_Setting/" 目录下面的c文件
-    test_c2res(C_source_dir +
-               "CWE835_Infinite_Loop/", function_list)
+    # test_c2res(C_source_dir +
+    #            "CWE835_Infinite_Loop/", function_list)
+    c2res("000/149/176/cgic.c",function_list)
     # 删掉joern 保存的 workspace 目录
     rm_command = "rm -rf ./workspace"
     subprocess.call(rm_command, shell=True)
