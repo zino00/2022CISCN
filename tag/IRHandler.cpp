@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <map>
 #include <list>
+#include <unordered_set>
 #include <unistd.h>
 
 using namespace llvm;
@@ -210,6 +211,52 @@ map<string, list<pair<string, int>>> getModuleInfo(Module & M) {
     return info_map;
 }
 
+map<string, unordered_set<string>> getCallInfo(Module & M) {
+    map<string, unordered_set<string>> info_map;
+    for(Function& F : M) {
+        string&& func_name = F.getName().str();
+        for (BasicBlock& B : F) {
+            for (Instruction& I : B) {
+                CallInst* call_inst = dyn_cast<CallInst>(&I);
+                if(!call_inst)
+                    continue;
+
+                Function* func = call_inst->getCalledFunction();
+                if(!func)
+                    continue;
+
+                const string && callee_name = func->getName().str();
+                LOG("%s is called by %s\n", callee_name.c_str(), func_name.c_str());
+                
+                info_map[func_name].insert(callee_name);
+            }
+        }
+    }
+    return info_map;
+}
+
+void saveCallInfoToXml(map<string, unordered_set<string>>& info, string& path) {
+    XMLDocument doc;
+    XMLElement* root = doc.NewElement("root");
+    doc.InsertEndChild(root);
+
+    for(auto &func_pair : info) {
+        const string& func_name = func_pair.first;
+        auto callee_list = func_pair.second;
+
+        XMLElement* function = doc.NewElement("function");
+        function->SetAttribute("name", func_name.c_str());
+        root->InsertEndChild(function);
+
+        for(auto& callee_name : callee_list) {
+            XMLElement* var = doc.NewElement("callee");
+            var->SetAttribute("name", callee_name.c_str());
+            function->InsertEndChild(var);
+        }
+    }
+    doc.SaveFile(path.c_str());
+}
+
 void saveModuleToXml(map<string, list<pair<string, int>>>& info, string& path) {
     /*
         <root>
@@ -338,6 +385,9 @@ int main(int argc, char **argv) {
         saveModuleToXml(module_info_map, xml_path);
     } else if (selector == "printTargetInst") {
         printTargetInst(*M, atoi(arg_id.c_str()));
+    } else if (selector == "getCallInfo") {
+        auto&& module_info_map = getCallInfo(*M);
+        saveCallInfoToXml(module_info_map, xml_path);
     }
     else 
         FATAL("Cannot recognize selector(\"%s\")", selector.c_str());
