@@ -14,6 +14,8 @@
 #include "tinyxml2/tinyxml2.h"
 #include <iostream>
 #include <cstdlib>
+#include <fstream>
+#include <sstream>
 #include <map>
 #include <list>
 #include <unordered_set>
@@ -28,6 +30,11 @@ using namespace std;
     fprintf(stderr, x); \
     exit(0); \
   } while (0)
+
+cl::opt<std::string> vuln_info_path(
+    "vuln-info-path", 
+    cl::desc("vuln info path"), 
+    cl::value_desc("vuln-info-path"));
 
 cl::opt<std::string> xml_path(
     "xml-path", 
@@ -114,7 +121,7 @@ map<string, list<size_t>> getVulnInfo(string xml_path) {
                 LOG("[-] Cannot find target <flaw>\n");
                 continue;
             }
-            for (XMLElement* flaw_elem = file_elem->FirstChildElement(); 
+            for (XMLElement* flaw_elem = file_elem->FirstChildElement("flaw"); 
                 flaw_elem; flaw_elem = flaw_elem->NextSiblingElement())
             {
                 const char* flaw_line_str = flaw_elem->Attribute("line");
@@ -373,9 +380,42 @@ int main(int argc, char **argv) {
 
     // LOG("[+] xml_path: %s\n", xml_path.c_str());
     // LOG("[+] src files: %s\n", M.getSourceFileName().c_str());
+    if(selector == "getVulnInstID-saveVulnInfo") {
+        ofstream ofs(vuln_info_path);
+        if(!ofs)
+            FATAL("Cannot open <vuln-info-path>\n");
+        map<string, list<size_t>>&& vulns_map = getVulnInfo(xml_path);
 
-    if(selector == "getVulnInstID") {
-        auto&& vulns_map = getVulnInfo(xml_path);
+        for(auto f : vulns_map) {
+            ofs << f.first << " ";
+            for(auto i : f.second)
+                ofs << i << " ";
+            ofs << endl;
+        }
+        LOG("Save %s VulnInfo to %s\n", xml_path.c_str(), vuln_info_path.c_str());
+    }
+    else if(selector == "getVulnInstID-useVulnInfo") {
+        map<string, list<size_t>> vulns_map;
+
+        ifstream ifs(vuln_info_path);
+        if(!ifs)
+            FATAL("Cannot open <vuln-info-path>\n");
+        stringstream sst;
+        string line, func_name;
+        size_t size;
+        list<size_t> vuln_lines;
+        while(getline(ifs, line)) {
+            sst.clear();
+            vuln_lines.clear();
+            sst << line;
+
+            sst >> func_name;
+            while(sst >> size)
+                vuln_lines.push_back(size);
+
+            vulns_map.insert(make_pair(move(func_name), move(vuln_lines)));
+        }
+
         vector<size_t>&& vuln_ids = getVulnInstID(vulns_map, *M);
 
         for(auto id : vuln_ids)
