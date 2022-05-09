@@ -1,0 +1,3 @@
+<template>
+    <LocateLayout></LocateLayout>
+</template>
