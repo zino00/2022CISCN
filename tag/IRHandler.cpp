@@ -329,7 +329,7 @@ void printTargetInst(Module & M, size_t id_arg) {
 
                         unsigned int line = dbg_loc.getLine();
 
-                        LOG("Inst(%ld): %s:%d\n", id, basename.c_str(), line);
+                        printf("Inst(%ld): %s:%d\n", id, basename.c_str(), line);
                         return;
                     }
                 }
