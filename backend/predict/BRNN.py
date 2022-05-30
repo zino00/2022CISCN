@@ -81,8 +81,8 @@ def result_process(single_dir_path, result_line):
     for i in range(len(ll_paths)):
         ll_paths[i]=ll_paths[i].decode('utf-8').strip()
     tmp_file_path = single_dir_path + "/tmp.txt"
-    result_list = []
-    result_item = {}
+    # C文件和其绝对路径的映射
+    basename_path={}
     # C文件和漏洞行号的映射
     vul = {}
     for i in range(len(result_line)):
@@ -98,13 +98,19 @@ def result_process(single_dir_path, result_line):
                 if basename not in vul:
                     vul[basename] = []
                 vul[basename].append(line)
+                absolute_path=ll_paths[i].replace("/slice_file/","/C_file/")
+                absolute_path=absolute_path[:absolute_path.rfind('/')]+'/'+basename
+                basename_path[basename]=absolute_path
     command = "rm " + tmp_file_path
     os.system(command)
+    result_list = []
+    result_item = {}
     for basename in vul:
         lines = vul[basename]
-        result_item["path"] = basename
-        with open(basename, "r") as C_file:
-            result_item["code"] == C_file.read()
+        absolute_path=basename_path[basename]
+        result_item["path"] = absolute_path[absolute_path.find(single_dir_path):]
+        with open(absolute_path, "r") as C_file:
+            result_item["code"] = C_file.read()
         result_item["vul"] = lines
         result_list.append(result_item)
     return json.dumps(result_list)

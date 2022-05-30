@@ -1,6 +1,5 @@
 import os
 import time
-import datetime
 import zipfile
 from flask import Blueprint, request, session, jsonify
 import predict
